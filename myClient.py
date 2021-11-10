@@ -3,7 +3,7 @@
 from socket import *
 import os.path
 import sys, re
-ENDSYMBOL = '|-&-|'
+SEPSYMBOL = '|-&-|'
 # default params
 serverAddr = ('localhost', 50001)
 
@@ -45,21 +45,27 @@ if file_exists == True:
         with open(filename, "rb") as f:
             for chunk in read_in_chunks(f, 100): #Read file and split into 100byte chunks.
                 segCount = segCount + 1
-        print(segCount)
+## SEND THE FILENAME AND SEG COUNT FIRST BEFORE WE EVEN BOTHER SENDING MSG.
         clientSocket.sendto(filename.encode(), serverAddr)  ## Send file name and segment count first.
         clientSocket.sendto(str(segCount).encode(), serverAddr) ## Send number of segments in file.
         InitACK, serverAddrPort = clientSocket.recvfrom(2048)
-        if InitACK.decode() == "OK":
+        if InitACK.decode() == "OK": ##CHECK IF "OK" IF "NOT-OK" "PANIC"
             print("Sending : '%s'" % filename)
             with open(filename, "rb") as f:
-                sendcount= 0
+                sendcount = 0
                 for chunk in read_in_chunks(f, 100):  # Read file and split into 100byte chunks.
                     if sendcount != segCount+1:
                         chunk = bytearray(chunk)
                         chunklen = len(chunk)
-                        chunk.extend(str(ENDSYMBOL).encode())
+
+                        ##CHANGE TO SAVE INTO BYTEARRAY AND CONCAT
+                        #headinfo = SEPSYMBOL + str(chunklen) + SEPSYMBOL + str(sendcount)
+                        #header = bytearray(headinfo)
+
+## CURRENT LAYOUT OF MESSAGE <><sep><chunklen><sep><sendcount> STILL NEED TO ADD START/END & SEND/RECV
+                        chunk.extend(str(SEPSYMBOL).encode())
                         chunk.extend(str(chunklen).encode())
-                        chunk.extend(str(ENDSYMBOL).encode())
+                        chunk.extend(str(SEPSYMBOL).encode())
                         chunk.extend(str(sendcount).encode())
                         print("Sending seg number : ", sendcount)
                         clientSocket.sendto(chunk,serverAddr) ## Send Chunk and wait for ACK
@@ -73,7 +79,7 @@ if file_exists == True:
                     else:
                         break
         else:
-            print("Sorry something went wrong.")
+            print("Sorry something went wrong now you can PANIC!!!")
 
     finally:
         print("Done")

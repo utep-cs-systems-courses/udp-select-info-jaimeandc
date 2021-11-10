@@ -23,23 +23,23 @@ def uppercase(sock):# check this socket 'sock' if we have somthing to rec.
   modifiedMessage = message.decode().upper().encode()
   sock.sendto(modifiedMessage, clientAddrPort)
 
+
 def getFile(sock):
   filename, clientAddrPort = sock.recvfrom(2048) ## Get filename from client
-  print("from %s: rec'd file: '%s'" % (repr(clientAddrPort), filename.decode())) ## send ACK
+  print("from %s: rec'd file: '%s'" % (repr(clientAddrPort), filename.decode()))
   segCount, clientAddrPort = sock.recvfrom(2048) ## Get number of segments that will be sent
   segCount = int(segCount.decode())
   print("from %s: segCount: '%d'" % (repr(clientAddrPort), segCount))
-  filenameACK = "OK"
-  sock.sendto(filenameACK.encode(), clientAddrPort) ## Send ACK that file is ready to be sent
+  fileACK = "OK"
+  sock.sendto(fileACK.encode(), clientAddrPort) ## Send ACK that file is ready to be sent
 
   firstpayload, clientAddrPort = sock.recvfrom(2048) ##Get first part of payload
   payloadlist = firstpayload.decode()
-  #print(payloadlist)
   payload, chunklen, recvCount = payloadlist.split(seporator) ##Split encap message
   sock.sendto(recvCount.encode(), clientAddrPort)
   filepayload.append(payload) ##Append first part of payload to array
   recvCount = int(recvCount)
-  print(recvCount)
+  #print(recvCount)
 
   while recvCount != segCount :
     payload_seg, clientAddrPort = sock.recvfrom(2048)
@@ -62,7 +62,12 @@ def getFile(sock):
     #  pass
 
   print("------------------FILE_PAYLOAD-----------------------")
-  print(filepayload)
+  newfilename = "new_" + filename.decode()
+  newFile = open(newfilename,"w")
+  for chunks in filepayload:
+    newFile.write(chunks)
+  #newFile.write(filepayload)
+  #print(filepayload)
 
 
     #segCountACK = segCount
@@ -85,7 +90,7 @@ readSockFunc = {}               # ready for reading
 writeSockFunc = {}              # ready for writing
 errorSockFunc = {}              # broken
 
-timeout = 15                     # select delay before giving up, in seconds
+timeout = 2                     # select delay before giving up, in seconds
 
 # function to call when upperServerSocket is ready for reading
 readSockFunc[upperServerSocket] = uppercase
