@@ -1,10 +1,14 @@
-import sys
+import sys, time
 from socket import *
 from select import select
 
-upperServerAddr = ("", 50000)  # any addr, port 50,000
+upperServerAddr = ("", 50001)  # any addr, port 50,000
+lastseg = 0
+lastsentPackage = None
+clientAddrPort = 0
 
-def encapMessage(payload, segnum, msgPart): # Will add send/rec
+
+def encapMessage(payload, segnum, msgPart):
     segnum = segnum.to_bytes(2, sys.byteorder)#Save segment num
     segnum = bytearray(segnum)
     msgPart = bytearray(msgPart.encode())#Save if message is fi
@@ -26,23 +30,38 @@ def openPacket(packet):
 def getFile(sock):
     "run this function when sock has rec'd a message"
     message, clientAddrPort = sock.recvfrom(2048)
-    #print("from %s: rec'd '%s'" % (repr(clientAddrPort), message))
     segnum, msgPart, paysize, message = openPacket(message)
-    currentfile = ""
+
+    #print("from %s: rec'd '%s'\n" % (repr(clientAddrPort), message))
+    print("Just recv: " +str(segnum))
+    lastseg = None
+
     if msgPart == "F": #If filename is sent
         print("Received filename :", message)
-        currentfile = message
         message = encapMessage("ready",segnum, "P")
+        lastsentPackage = message
+        lastseg = segnum
         sock.sendto(message, clientAddrPort)
-    elif msgPart == "P": #If file payload is sent
-        print("Receiving segment: ",segnum," - ", message)
-        #file = open(currentfile,"a")
-        message = encapMessage('ready',segnum,"P")
-        #file.close()
-        sock.sendto(message, clientAddrPort)
-    elif msgPart == "C":
+    elif msgPart == "P": #msg is being sent and being checked for sequence.
+        #print("Receiving segment: ",segnum," - ", message)
+        #print("Last got seg: "+str(lastseg)+"Just got seg: "+str(segnum))
+        if segnum-1 != lastseg:
+            # file = open(currentfile,"a")
+            message = encapMessage('ready', segnum, "P")
+            lastsentPackage = message ##save if we need to resend on timeout
+            sock.sendto(message, clientAddrPort)
+            print("Sening Ack for next Seg")
+            lastseg = segnum
+        else:
+            print("NEED TO RESEND seg:" + str(lastseg))
+            re_message = encapMessage("resend", segnum, "P")
+            sock.sendto(re_message, clientAddrPort)
 
-        print("Done sending file.")
+
+
+
+    elif msgPart == "C":
+        print("Done Reciving file.")
 
 
 
@@ -68,6 +87,6 @@ while 1:
                                                   list(errorSockFunc.keys()),
                                                   timeout)
     if not readRdySet and not writeRdySet and not errorRdySet:
-        print("timeout: no events.") ## NEED TO ADD TIMOUT FEATURE.
+        print("Waiting for clients")
     for sock in readRdySet:
         readSockFunc[sock](sock)

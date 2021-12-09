@@ -1,12 +1,16 @@
 #! /usr/bin/env python3
 from socket import *
-import sys, os
+import sys, os, time
 import select
 
 serverAddr = ('localhost', 50000)
 connection = socket(AF_INET, SOCK_DGRAM)
 connection.setblocking(False)
 filename = ""
+previousPacket = ""
+final_time = 0
+inital_time = 0
+rtt = 0
 
 
 def read_in_chunks(file,size):
@@ -26,11 +30,8 @@ def getfileSize(file):
     file_size = os.path.getsize(file)
     file_size = file_size // 100
     return file_size
-
 def readfile(file):
     file=open(file,"rb")
-
-
 def encapMessage(payload, segnum, msgPart): # Will add send/recv & isfilename?
     segnum = segnum.to_bytes(2, sys.byteorder)#Save segment num to byte array
     segnum = bytearray(segnum)
@@ -51,57 +52,59 @@ def openPacket(packet):
     payload = packet[-paysize:]
     return segnum, msgPart.decode(), paysize, payload.decode()
 
-
+timeout = rtt
+print("Enter Filename to send")
 while True:
     readers, writers, _ = select.select([connection,sys.stdin],[],[])
+    if not readers and not writers and not _:
+        print("Timeout attempt to send again")
+        connection.sendto(previousPacket, serverAddr)
 
     for reader in readers:
         if reader is connection:
             ##WHAT DO DO ONCE MESSAGE HAS BEEN RECIVED.
             firstmsg, clientAddr = connection.recvfrom(2048)
-            segnum, isfilename, paysize, message = openPacket(firstmsg) # SPLIT METADATA FROM PAYLOAD
-            print("MSG_FROM_SERVER:",message)
-            totalseg = getfileSize(filename)
+            segnum, isfilename, paysize, message = openPacket(firstmsg)  # SPLIT METADATA FROM PAYLOAD
+
+            final_time = time.time()
+            rtt = final_time - initial_time ##Update RTT
+            print("Rount Trip Time: ",rtt)
+
             #OPEN FILE AND START READING AND SENDING.
+            totalseg = getfileSize(filename)
             file = open(filename,"rb")
-            if message == "ready":
+
+            if message == "ready": ##Acknolegement of previous seg recived
                 for currentRead in read_in_chunks(file,100):
                     if segnum != totalseg+1:
-                        #currentRead = file.read(100)
-                        print(currentRead)
-                        print("currentseg:"+ str(segnum) + " totalseg:" + str(totalseg))
                         packet = encapMessage(currentRead.decode(), segnum , "P")
+                        previousPacket = packet ##save a copy incase we need to resend.
                         connection.sendto(packet,serverAddr)
                         segnum += 1
-                else:
+                        print("Sending Segment: " +str(segnum))
+
+                else: ## ONCE FILE HAS BEEN READ.
                     print("DONE sending file.")
-                    sendCheck = encapMessage(str(totalseg+1).encode(),0, "C")
+                    done_msg = encapMessage(str(totalseg+1),0, "C")
+                    connection.sendto(done_msg, serverAddr)
                     file.close()
                     exit(0)
+            elif message == "resend":
+                print("Attempting to resend packet")
+                connection.sendto(previousPacket,serverAddr)
 
             else:
-                print("IDK WHAT YOUR ASKING FROM ME... YET")
-
-
-
-
-
-                    #packet = encapMessage(currentRead.decode(), currentseg, "N")
-                    #connection.sendto(packet,serverAddr)
-                #for currentRead in read_in_chunks(file,100):
-                #    print(currentRead.decode())
-                #    packet = encapMessage(currentRead.decode(), segnum, "N")
-                #    connection.sendto(packet,serverAddr)
-                #    segnum + 1
+                print("Sorry server got scared.")
 
         else:
             filename = sys.stdin.readline()[:-1]
-            print(getfileSize(filename))
+            print("Sending "+str(getfileSize(filename))+" Segments")
+            ##ASKING FOR FILENAME AND CHECK IF EXISTS
             if fileExist(filename) == True: #will change back to True later
                 msg = encapMessage(filename,0,"F")
                 connection.sendto(msg,serverAddr)
-
-
+                previousPacket = msg ## Save incase we need to resend
+                initial_time = time.time()
             else:
                 print("Enter 'Real' File ")
 
